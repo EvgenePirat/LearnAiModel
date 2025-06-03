@@ -1,0 +1,8 @@
+codes_1b_sql_generator/config.json
+codes_1b_sql_generator/generation_config.json
+codes_1b_sql_generator/merges.txt
+codes_1b_sql_generator/model.safetensors
+codes_1b_sql_generator/special_tokens_map.json
+codes_1b_sql_generator/tokenizer_config.json
+codes_1b_sql_generator/tokenizer.json
+codes_1b_sql_generator/vocab.json
