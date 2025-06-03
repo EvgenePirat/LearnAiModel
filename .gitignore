@@ -6,3 +6,6 @@ codes_1b_sql_generator/special_tokens_map.json
 codes_1b_sql_generator/tokenizer_config.json
 codes_1b_sql_generator/tokenizer.json
 codes_1b_sql_generator/vocab.json
+
+venv
+train_codes_1b_log.txt

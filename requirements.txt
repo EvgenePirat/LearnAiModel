@@ -1,0 +1,10 @@
+transformers
+torch
+numpy
+pandas
+pyodbc
+datasets
+tenacity
+flask
+flasgger
+flask-cors
