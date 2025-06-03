@@ -10,6 +10,7 @@ from flask import Flask, request, jsonify
 from flasgger import Swagger, swag_from
 from flask_cors import CORS
 from datetime import datetime
+from train_model import start_training  # Import start_training from train_model.py
 
 # Configure logging
 log_file = "train_codes_1b_log.txt"
@@ -41,6 +42,7 @@ if device.type == "cpu":
 if device.type == "cuda":
     torch.cuda.empty_cache()
 
+# Function to update training status
 def update_status(process_type, status_data):
     try:
         status_file = "training_status.json"
@@ -55,6 +57,7 @@ def update_status(process_type, status_data):
         logger.error(f"Error updating status: {e}")
         print(f"Error updating status: {e}")
 
+# Function to generate SQL from natural language
 def generate_sql(text, model, tokenizer, max_input_length=128, max_new_tokens=256, device="cuda"):
     try:
         model.eval()
@@ -99,7 +102,7 @@ def generate_sql(text, model, tokenizer, max_input_length=128, max_new_tokens=25
 
 # Initialize Flask and Swagger
 app = Flask(__name__)
-CORS(app)  # Включить CORS
+CORS(app)  # Enable CORS
 swagger = Swagger(app, template={
     "swagger": "2.0",
     "info": {
@@ -107,7 +110,7 @@ swagger = Swagger(app, template={
         "description": "API for generating SQL queries using CodeS 1B model",
         "version": "1.0.0"
     },
-    "host": "localhost:5000",  # Изменено на localhost
+    "host": "localhost:5000",
     "basePath": "/",
     "schemes": ["http"],
 })
@@ -164,7 +167,7 @@ tokenizer = None
 def generate_sql_endpoint():
     logger.info("Received request to /generate_sql")
     global model, tokenizer
-    
+
     if not os.path.exists(output_dir):
         return jsonify({"status": "error", "message": f"Model in directory {output_dir} not found. Train the model first."}), 400
     
@@ -194,6 +197,156 @@ def generate_sql_endpoint():
     except Exception as e:
         logger.error(f"Error generating SQL: {e}")
         return jsonify({"status": "error", "message": f"Error generating SQL: {str(e)}"}), 500
+    
+
+@app.route("/training_status", methods=["GET"])
+@swag_from({
+    'tags': ['Training Status'],
+    'description': 'Get the current training status',
+    'responses': {
+        '200': {
+            'description': 'Training status retrieved successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string'},
+                    'message': {'type': 'string'},
+                    'training_status': {'type': 'object' }
+                }
+            }
+        },
+        '500': {
+            'description': 'Server error'
+        }
+    }
+})
+def training_status_endpoint():
+    logger.info("Received request to /training_status")
+    try:
+        status_file = "training_status.json"
+        if os.path.exists(status_file):
+            with open(status_file, "r") as f:
+                status = json.load(f)
+            return jsonify({
+                "status": "success",
+                "message": "Training status retrieved successfully",
+                "training_status": status.get("training", {})
+            }), 200
+        else:
+            return jsonify({
+                "status": "success",
+                "message": "No training status available",
+                "training_status": {}
+            }), 200
+    except Exception as e:
+        logger.error(f"Error retrieving training status: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Error retrieving training status: {str(e)}"
+        }), 500
+
+@app.route("/training_logs", methods=["GET"])
+@swag_from({
+    'tags': ['Training Logs'],
+    'description': 'Get the latest training logs',
+    'parameters': [
+        {
+            'name': 'lines',
+            'in': 'query',
+            'type': 'integer',
+            'required': False,
+            'description': 'Number of log lines to retrieve (default: 10)',
+            'default': 10
+        }
+    ],
+    'responses': {
+        '200': {
+            'description': 'Training logs retrieved successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string'},
+                    'message': {'type': 'string'},
+                    'logs': {'type': 'array', 'items': {'type': 'string'}}
+                }
+            }
+        },
+        '500': {
+            'description': 'Server error'
+        }
+    }
+})
+def training_logs_endpoint():
+    logger.info("Received request to /training_logs")
+    try:
+        lines = request.args.get('lines', default=10, type=int)
+        log_file_path = "train_codes_1b_log.txt"
+        logs = []
+        
+        if os.path.exists(log_file_path):
+            with open(log_file_path, "r") as f:
+                logs = f.readlines()
+                logs = [line.strip() for line in logs[-lines:]]  # Get last N lines
+            return jsonify({
+                "status": "success",
+                "message": "Logs retrieved successfully",
+                "logs": logs
+            }), 200
+        else:
+            return jsonify({
+                "status": "success",
+                "message": "No logs available",
+                "logs": []
+            }), 200
+    except Exception as e:
+        logger.error(f"Error retrieving logs: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Error retrieving logs: {str(e)}"
+        }), 500
+
+@app.route("/train", methods=["POST"])
+@swag_from({
+    'tags': ['Model Training'],
+    'description': 'Start training the model if it does not exist, or return a message if it already exists',
+    'responses': {
+        '200': {
+            'description': 'Training started or model already exists',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string'},
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        '500': {
+            'description': 'Server error'
+        }
+    }
+})
+def train_endpoint():
+    logger.info("Received request to /train")
+    logger.debug(f"Request headers: {request.headers}")
+    logger.debug(f"Request body: {request.get_data(as_text=True)}")
+    try:
+        if not os.path.exists(output_dir):
+            logger.info(f"Model directory {output_dir} not found. Starting training...")
+            training_result = start_training()
+            logger.info(f"Training initiation result: {training_result}")
+            return jsonify({
+                "status": training_result["status"],
+                "message": training_result["message"]
+            }), 200
+        else:
+            logger.info(f"Model already exists in {output_dir}. No training needed.")
+            return jsonify({
+                "status": "success",
+                "message": f"Model already exists in {output_dir}. No training needed."
+            }), 200
+    except Exception as e:
+        logger.error(f"Error in training endpoint: {str(e)}")
+        return jsonify({"status": "error", "message": f"Error in training endpoint: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

@@ -9,3 +9,7 @@ codes_1b_sql_generator/vocab.json
 
 venv
 train_codes_1b_log.txt
+training_status.json
+
+__pycache__/
+*.py[cod]
